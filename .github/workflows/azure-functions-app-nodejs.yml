@@ -23,11 +23,9 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
-        working-directory: ./editor-service
         run: npm install
 
       - name: Build app
-        working-directory: ./editor-service
         run: npm run build
 
       - name: Azure login
@@ -39,4 +37,4 @@ jobs:
         uses: azure/webapps-deploy@v3
         with:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
-          package: ./editor-service
+          package: .
