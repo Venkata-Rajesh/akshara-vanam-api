@@ -5,8 +5,8 @@ on:
     branches: ["main"]
 
 env:
-  AZURE_WEBAPP_NAME: "akshara-vanam-api" # replace with your Azure Web App name
-  NODE_VERSION: "20.x"
+  AZURE_WEBAPP_NAME: "akshara-vanam-api"
+  NODE_VERSION: "24"
 
 jobs:
   build-and-deploy:
@@ -21,8 +21,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
-          cache-dependency-path: ./editor-service/package-lock.json
 
       - name: Install dependencies
         working-directory: ./editor-service
