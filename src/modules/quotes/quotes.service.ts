@@ -4,21 +4,36 @@ import { IQuote } from "./quotes.model";
 import {
   CreateQuoteInput,
   QueryQuotesInput,
+  ReviewQuoteInput,
   UpdateQuoteInput,
 } from "./quotes.validation";
 import { NotFoundError, ForbiddenError } from "../../utils/appError";
 import { MESSAGES } from "../../constants/messages";
 import { UserContext } from "../../types";
+import { ReactionType } from "./reaction.model";
+import { ReactionService, reactionService } from "./reaction.service";
+import {
+  canManageQuote,
+  canViewQuote,
+  statusAfterQuoteEdit,
+  submissionStatus,
+} from "./quote.policy";
+
+const escapeRegex = (value: string): string =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export class QuotesService {
-  constructor(private repo: QuoteRepository = quoteRepository) {}
+  constructor(
+    private repo: QuoteRepository = quoteRepository,
+    private reactions: ReactionService = reactionService,
+  ) {}
 
-  async getQuotes(params: QueryQuotesInput) {
-    const filter: FilterQuery<IQuote> = {};
+  async getQuotes(params: QueryQuotesInput, user?: UserContext) {
+    const filter: FilterQuery<IQuote> = { status: "published" };
 
     // 1. Text Search / Query filter
     if (params.q && params.q.trim()) {
-      const searchRegex = new RegExp(params.q.trim(), "i");
+      const searchRegex = new RegExp(escapeRegex(params.q.trim()), "i");
       filter.$or = [
         { content: searchRegex },
         { author: searchRegex },
@@ -28,12 +43,12 @@ export class QuotesService {
 
     // 2. Tag filter
     if (params.tag && params.tag.trim()) {
-      filter.tags = new RegExp(`^${params.tag.trim()}$`, "i");
+      filter.tags = new RegExp(`^${escapeRegex(params.tag.trim())}$`, "i");
     }
 
     // 3. Author filter
     if (params.author && params.author.trim()) {
-      filter.author = new RegExp(params.author.trim(), "i");
+      filter.author = new RegExp(escapeRegex(params.author.trim()), "i");
     }
 
     const { quotes, total } = await this.repo.find(filter, {
@@ -42,7 +57,41 @@ export class QuotesService {
       sortBy: params.sortBy,
       sortOrder: params.sortOrder,
     });
+    const summaries = await this.reactions.getSummaries(
+      quotes.map((quote) => quote._id.toString()),
+      user?.id,
+    );
+    const enrichedQuotes = quotes.map((quote) => {
+      const plainQuote =
+        typeof quote.toJSON === "function" ? quote.toJSON() : quote;
+      return { ...plainQuote, ...summaries[quote._id.toString()] };
+    });
 
+    const totalPages = Math.ceil(total / params.limit) || 1;
+
+    return {
+      quotes: enrichedQuotes,
+      meta: {
+        total,
+        page: params.page,
+        limit: params.limit,
+        totalPages,
+        hasNextPage: params.page < totalPages,
+        hasPrevPage: params.page > 1,
+      },
+    };
+  }
+
+  async getPendingQuotes(params: QueryQuotesInput) {
+    const { quotes, total } = await this.repo.find(
+      { status: "pending" },
+      {
+        page: params.page,
+        limit: params.limit,
+        sortBy: params.sortBy,
+        sortOrder: params.sortOrder,
+      },
+    );
     const totalPages = Math.ceil(total / params.limit) || 1;
 
     return {
@@ -58,12 +107,19 @@ export class QuotesService {
     };
   }
 
-  async getQuoteById(id: string): Promise<IQuote> {
+  async getQuoteById(id: string, user?: UserContext): Promise<IQuote> {
     const quote = await this.repo.findById(id);
     if (!quote) {
       throw new NotFoundError(MESSAGES.QUOTES.NOT_FOUND);
     }
-    return quote;
+    const ownerId = quote.createdBy?.toString();
+    if (!canViewQuote(quote.status, ownerId, user)) {
+      throw new NotFoundError(MESSAGES.QUOTES.NOT_FOUND);
+    }
+    const summary = await this.reactions.getSummaries([id], user?.id);
+    const plainQuote =
+      typeof quote.toJSON === "function" ? quote.toJSON() : quote;
+    return { ...plainQuote, ...summary[id] } as IQuote;
   }
 
   async createQuote(
@@ -77,6 +133,7 @@ export class QuotesService {
       tags: input.tags.map((t) => t.trim()),
       language: input.language || "english",
       transliterationMode: input.transliterationMode || "native",
+      status: submissionStatus(user?.role),
       createdBy:
         user && Types.ObjectId.isValid(user.id)
           ? new Types.ObjectId(user.id)
@@ -91,14 +148,11 @@ export class QuotesService {
     input: UpdateQuoteInput,
     user: UserContext,
   ): Promise<IQuote> {
-    const quote = await this.getQuoteById(id);
+    const quote = await this.getQuoteById(id, user);
 
-    // Authorization: only creator or admin can update
-    if (
-      quote.createdBy &&
-      quote.createdBy.toString() !== user.id &&
-      user.role !== "admin"
-    ) {
+    const isAdmin = user.role === "admin";
+    const ownerId = quote.createdBy?.toString();
+    if (!canManageQuote(ownerId, user)) {
       throw new ForbiddenError(MESSAGES.AUTH.FORBIDDEN);
     }
 
@@ -111,6 +165,7 @@ export class QuotesService {
     if (input.language !== undefined) updateData.language = input.language;
     if (input.transliterationMode !== undefined)
       updateData.transliterationMode = input.transliterationMode;
+    updateData.status = statusAfterQuoteEdit(quote.status, user.role);
 
     const updated = await this.repo.update(id, updateData);
     if (!updated) {
@@ -119,27 +174,37 @@ export class QuotesService {
     return updated;
   }
 
-  async deleteQuote(id: string, user: UserContext): Promise<void> {
-    const quote = await this.getQuoteById(id);
+  async reviewQuote(
+    id: string,
+    input: ReviewQuoteInput,
+    admin: UserContext,
+  ): Promise<IQuote> {
+    const quote = await this.repo.findById(id);
+    if (!quote) throw new NotFoundError(MESSAGES.QUOTES.NOT_FOUND);
 
-    // Authorization: only creator or admin can delete
-    if (
-      quote.createdBy &&
-      quote.createdBy.toString() !== user.id &&
-      user.role !== "admin"
-    ) {
+    const reviewed = await this.repo.update(id, {
+      status: input.status,
+      moderatedAt: new Date(),
+      moderatedBy: new Types.ObjectId(admin.id),
+      moderationNote: input.moderationNote?.trim(),
+    });
+    if (!reviewed) throw new NotFoundError(MESSAGES.QUOTES.NOT_FOUND);
+    return reviewed;
+  }
+
+  async deleteQuote(id: string, user: UserContext): Promise<void> {
+    const quote = await this.getQuoteById(id, user);
+
+    const ownerId = quote.createdBy?.toString();
+    if (!canManageQuote(ownerId, user)) {
       throw new ForbiddenError(MESSAGES.AUTH.FORBIDDEN);
     }
 
     await this.repo.delete(id);
   }
 
-  async toggleLike(id: string, userId: string) {
-    const result = await this.repo.toggleLike(id, userId);
-    if (!result) {
-      throw new NotFoundError(MESSAGES.QUOTES.NOT_FOUND);
-    }
-    return result;
+  async setReaction(id: string, userId: string, type: ReactionType | null) {
+    return this.reactions.setReaction(id, userId, type);
   }
 
   async getTags(): Promise<{ tag: string; count: number }[]> {

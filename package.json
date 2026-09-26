@@ -8,7 +8,10 @@
     "dev": "bun --watch src/server.ts",
     "start": "bun src/server.ts",
     "build": "tsc --noEmit",
-    "seed": "bun src/seed/seedData.ts"
+    "test": "bun test tests",
+    "seed": "bun src/seed/seedData.ts",
+    "admin:promote": "bun src/seed/promoteAdmin.ts",
+    "admin:remove-demo": "bun src/seed/removeDemoAdmin.ts"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -12,7 +12,7 @@ export const createQuoteSchema = z.object({
       .min(2, "Author must be at least 2 characters")
       .max(100, "Author cannot exceed 100 characters"),
     tags: z
-      .array(z.string().min(1, "Tag cannot be empty"))
+      .array(z.string().trim().min(1, "Tag cannot be empty").max(50))
       .min(1, "At least one tag is required"),
     language: z.enum(["english", "telugu"]).default("english").optional(),
     transliterationMode: z
@@ -39,7 +39,7 @@ export const updateQuoteSchema = z.object({
       .max(100, "Author cannot exceed 100 characters")
       .optional(),
     tags: z
-      .array(z.string().min(1, "Tag cannot be empty"))
+      .array(z.string().trim().min(1, "Tag cannot be empty").max(50))
       .min(1, "At least one tag is required")
       .optional(),
     language: z.enum(["english", "telugu"]).optional(),
@@ -49,9 +49,9 @@ export const updateQuoteSchema = z.object({
 
 export const queryQuotesSchema = z.object({
   query: z.object({
-    q: z.string().optional(),
-    tag: z.string().optional(),
-    author: z.string().optional(),
+    q: z.string().max(100).optional(),
+    tag: z.string().max(50).optional(),
+    author: z.string().max(100).optional(),
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(50),
     sortBy: z.enum(["latest", "popular", "author"]).default("latest"),
@@ -61,10 +61,36 @@ export const queryQuotesSchema = z.object({
 
 export const quoteIdSchema = z.object({
   params: z.object({
-    id: z.string({ required_error: "Quote ID is required" }),
+    id: z
+      .string({ required_error: "Quote ID is required" })
+      .regex(/^[0-9a-f]{24}$/i, "Invalid quote ID"),
+  }),
+});
+
+export const reviewQuoteSchema = z.object({
+  params: z.object({
+    id: z
+      .string({ required_error: "Quote ID is required" })
+      .regex(/^[0-9a-f]{24}$/i),
+  }),
+  body: z.object({
+    status: z.enum(["published", "rejected"]),
+    moderationNote: z.string().max(500).optional(),
+  }),
+});
+
+export const setReactionSchema = z.object({
+  params: z.object({
+    id: z
+      .string({ required_error: "Quote ID is required" })
+      .regex(/^[0-9a-f]{24}$/i),
+  }),
+  body: z.object({
+    type: z.enum(["like", "dislike"]).nullable(),
   }),
 });
 
 export type CreateQuoteInput = z.infer<typeof createQuoteSchema>["body"];
 export type UpdateQuoteInput = z.infer<typeof updateQuoteSchema>["body"];
 export type QueryQuotesInput = z.infer<typeof queryQuotesSchema>["query"];
+export type ReviewQuoteInput = z.infer<typeof reviewQuoteSchema>["body"];

@@ -1,5 +1,7 @@
-import { FilterQuery, Types } from "mongoose";
+import { FilterQuery } from "mongoose";
 import { IQuote, Quote } from "./quotes.model";
+import { QuoteReaction } from "./reaction.model";
+import { QuoteComment } from "./comment.model";
 import { db } from "../../config/db";
 import { INITIAL_QUOTES } from "../../seed/seedData";
 import { AppError } from "../../utils/appError";
@@ -74,21 +76,49 @@ export class QuoteRepository {
     if (db.isDbConnected()) {
       try {
         let sortOption: Record<string, 1 | -1> = { createdAt: -1 };
-        if (options.sortBy === "popular") {
-          sortOption = { likesCount: -1, createdAt: -1 };
-        } else if (options.sortBy === "author") {
+        if (options.sortBy === "author") {
           sortOption = { author: options.sortOrder === "desc" ? -1 : 1 };
-        } else if (options.sortOrder === "asc") {
+        } else if (
+          options.sortOrder === "asc" &&
+          options.sortBy !== "popular"
+        ) {
           sortOption = { createdAt: 1 };
         }
 
+        const quoteQuery =
+          options.sortBy === "popular"
+            ? Quote.aggregate([
+                { $match: filter },
+                {
+                  $lookup: {
+                    from: QuoteReaction.collection.name,
+                    localField: "_id",
+                    foreignField: "quoteId",
+                    as: "reactions",
+                  },
+                },
+                { $addFields: { reactionCount: { $size: "$reactions" } } },
+                { $sort: { reactionCount: -1, createdAt: -1 } },
+                { $skip: skip },
+                { $limit: limit },
+                { $project: { reactions: 0, reactionCount: 0 } },
+              ])
+                .exec()
+                .then((items) =>
+                  Quote.populate(items, {
+                    path: "createdBy",
+                    select: "username avatarUrl",
+                  }),
+                )
+            : Quote.find(filter)
+                .sort(sortOption)
+                .skip(skip)
+                .limit(limit)
+                .populate("createdBy", "username avatarUrl")
+                .exec();
+
         const [quotes, total] = await Promise.all([
-          Quote.find(filter)
-            .sort(sortOption)
-            .skip(skip)
-            .limit(limit)
-            .populate("createdBy", "username email avatarUrl")
-            .exec(),
+          quoteQuery,
           Quote.countDocuments(filter).exec(),
         ]);
 
@@ -161,9 +191,7 @@ export class QuoteRepository {
     this.requireDatabase();
     if (db.isDbConnected()) {
       try {
-        return await Quote.findById(id)
-          .populate("createdBy", "username email avatarUrl")
-          .exec();
+        return await Quote.findById(id).exec();
       } catch (error) {
         throw error;
       }
@@ -237,7 +265,14 @@ export class QuoteRepository {
     this.requireDatabase();
     if (db.isDbConnected()) {
       try {
-        return await Quote.findByIdAndDelete(id).exec();
+        const deleted = await Quote.findByIdAndDelete(id).exec();
+        if (deleted) {
+          await Promise.all([
+            QuoteReaction.deleteMany({ quoteId: deleted._id }).exec(),
+            QuoteComment.deleteMany({ quoteId: deleted._id }).exec(),
+          ]);
+        }
+        return deleted;
       } catch (error) {
         throw error;
       }
@@ -268,6 +303,7 @@ export class QuoteRepository {
     if (db.isDbConnected()) {
       try {
         const result = await Quote.aggregate([
+          { $match: { status: "published" } },
           { $unwind: "$tags" },
           { $group: { _id: "$tags", count: { $sum: 1 } } },
           { $project: { _id: 0, tag: "$_id", count: 1 } },
@@ -289,60 +325,6 @@ export class QuoteRepository {
     return Array.from(tagCountMap.entries())
       .map(([tag, count]) => ({ tag, count }))
       .sort((a, b) => b.count - a.count);
-  }
-
-  async toggleLike(
-    quoteId: string,
-    userId: string,
-  ): Promise<{ quote: any; isLiked: boolean } | null> {
-    this.requireDatabase();
-    if (db.isDbConnected()) {
-      try {
-        const quote = await Quote.findById(quoteId);
-        if (!quote) return null;
-
-        const userObjectId = new Types.ObjectId(userId);
-        const existingIndex = quote.likedBy.findIndex(
-          (id) => id.toString() === userId,
-        );
-
-        let isLiked = false;
-        if (existingIndex > -1) {
-          quote.likedBy.splice(existingIndex, 1);
-          quote.likesCount = Math.max(0, quote.likesCount - 1);
-          isLiked = false;
-        } else {
-          quote.likedBy.push(userObjectId);
-          quote.likesCount += 1;
-          isLiked = true;
-        }
-
-        await quote.save();
-        return { quote, isLiked };
-      } catch (error) {
-        throw error;
-      }
-    }
-
-    const quote = this.memoryQuotes.find(
-      (q) => q.id === quoteId || q._id === quoteId,
-    );
-    if (!quote) return null;
-
-    const existingIndex = quote.likedBy.indexOf(userId);
-    let isLiked = false;
-
-    if (existingIndex > -1) {
-      quote.likedBy.splice(existingIndex, 1);
-      quote.likesCount = Math.max(0, quote.likesCount - 1);
-      isLiked = false;
-    } else {
-      quote.likedBy.push(userId);
-      quote.likesCount += 1;
-      isLiked = true;
-    }
-
-    return { quote, isLiked };
   }
 
   async insertMany(quotes: Partial<IQuote>[]): Promise<any[]> {

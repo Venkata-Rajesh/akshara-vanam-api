@@ -7,10 +7,12 @@ export interface IQuote extends Document {
   tags: string[];
   language?: "english" | "telugu";
   transliterationMode?: "native" | "roman";
+  status: "pending" | "published" | "rejected";
+  moderatedAt?: Date;
+  moderatedBy?: Types.ObjectId;
+  moderationNote?: string;
   authorSlug?: string;
   length?: number;
-  likesCount: number;
-  likedBy: Types.ObjectId[];
   createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -57,6 +59,24 @@ const quoteSchema = new Schema<IQuote>(
       enum: ["native", "roman"],
       default: "native",
     },
+    status: {
+      type: String,
+      enum: ["pending", "published", "rejected"],
+      default: "pending",
+      index: true,
+    },
+    moderatedAt: {
+      type: Date,
+    },
+    moderatedBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+    moderationNote: {
+      type: String,
+      trim: true,
+      maxlength: [500, "Moderation note cannot exceed 500 characters"],
+    },
     authorSlug: {
       type: String,
       trim: true,
@@ -65,16 +85,6 @@ const quoteSchema = new Schema<IQuote>(
     length: {
       type: Number,
     },
-    likesCount: {
-      type: Number,
-      default: 0,
-    },
-    likedBy: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
     createdBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
@@ -114,6 +124,7 @@ quoteSchema.index(
   { default_language: "english", language_override: "textSearchLanguage" },
 );
 quoteSchema.index({ createdAt: -1 });
+quoteSchema.index({ status: 1, createdAt: -1 });
 
 export const Quote: Model<IQuote> = mongoose.model<IQuote>(
   "Quote",

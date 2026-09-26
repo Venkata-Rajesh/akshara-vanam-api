@@ -1,7 +1,7 @@
-import rateLimit from 'express-rate-limit';
-import { env } from '../config/env';
-import { ApiResponse } from '../utils/apiResponse';
-import { HTTP_STATUS } from '../constants/httpStatusCodes';
+import rateLimit from "express-rate-limit";
+import { env } from "../config/env";
+import { ApiResponse } from "../utils/apiResponse";
+import { HTTP_STATUS } from "../constants/httpStatusCodes";
 
 export const globalRateLimiter = rateLimit({
   windowMs: env.RATE_LIMIT_WINDOW_MS,
@@ -11,8 +11,8 @@ export const globalRateLimiter = rateLimit({
   handler: (req, res) => {
     ApiResponse.error(
       res,
-      'Too many requests created from this IP, please try again after 15 minutes',
-      HTTP_STATUS.TOO_MANY_REQUESTS
+      "Too many requests created from this IP, please try again after 15 minutes",
+      HTTP_STATUS.TOO_MANY_REQUESTS,
     );
   },
 });
@@ -25,8 +25,36 @@ export const authRateLimiter = rateLimit({
   handler: (req, res) => {
     ApiResponse.error(
       res,
-      'Too many login attempts from this IP, please try again after 15 minutes',
-      HTTP_STATUS.TOO_MANY_REQUESTS
+      "Too many login attempts from this IP, please try again after 15 minutes",
+      HTTP_STATUS.TOO_MANY_REQUESTS,
+    );
+  },
+});
+
+export const quoteSubmissionRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    ApiResponse.error(
+      res,
+      "Too many quote submissions. Try again later.",
+      HTTP_STATUS.TOO_MANY_REQUESTS,
+    );
+  },
+});
+
+export const commentRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    ApiResponse.error(
+      res,
+      "Too many comments. Try again later.",
+      HTTP_STATUS.TOO_MANY_REQUESTS,
     );
   },
 });

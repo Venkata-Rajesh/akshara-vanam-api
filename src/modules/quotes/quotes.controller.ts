@@ -1,21 +1,47 @@
-import { Request, Response } from 'express';
-import { quotesService, QuotesService } from './quotes.service';
-import { ApiResponse } from '../../utils/apiResponse';
-import { asyncHandler } from '../../utils/asyncHandler';
-import { MESSAGES } from '../../constants/messages';
+import { Request, Response } from "express";
+import { quotesService, QuotesService } from "./quotes.service";
+import { ApiResponse } from "../../utils/apiResponse";
+import { asyncHandler } from "../../utils/asyncHandler";
+import { MESSAGES } from "../../constants/messages";
 
 export class QuotesController {
   constructor(private service: QuotesService = quotesService) {}
 
   getQuotes = asyncHandler(async (req: Request, res: Response) => {
-    const { quotes, meta } = await this.service.getQuotes(req.query as any);
-    return ApiResponse.success(res, quotes, MESSAGES.QUOTES.FETCH_SUCCESS, 200, meta);
+    const { quotes, meta } = await this.service.getQuotes(
+      req.query as any,
+      req.user,
+    );
+    return ApiResponse.success(
+      res,
+      quotes,
+      MESSAGES.QUOTES.FETCH_SUCCESS,
+      200,
+      meta,
+    );
   });
 
   getQuoteById = asyncHandler(async (req: Request, res: Response) => {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const quote = await this.service.getQuoteById(id);
+    const quote = await this.service.getQuoteById(id, req.user);
     return ApiResponse.success(res, quote, MESSAGES.QUOTES.FETCH_ONE_SUCCESS);
+  });
+
+  getPendingQuotes = asyncHandler(async (req: Request, res: Response) => {
+    const result = await this.service.getPendingQuotes(req.query as any);
+    return ApiResponse.success(
+      res,
+      result.quotes,
+      MESSAGES.QUOTES.FETCH_SUCCESS,
+      200,
+      result.meta,
+    );
+  });
+
+  reviewQuote = asyncHandler(async (req: Request, res: Response) => {
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const quote = await this.service.reviewQuote(id, req.body, req.user!);
+    return ApiResponse.success(res, quote, "Quote review updated.");
   });
 
   createQuote = asyncHandler(async (req: Request, res: Response) => {
@@ -40,10 +66,14 @@ export class QuotesController {
     return ApiResponse.success(res, tags, MESSAGES.QUOTES.TAGS_FETCH_SUCCESS);
   });
 
-  toggleLike = asyncHandler(async (req: Request, res: Response) => {
+  setReaction = asyncHandler(async (req: Request, res: Response) => {
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const result = await this.service.toggleLike(id, req.user!.id);
-    return ApiResponse.success(res, result, MESSAGES.QUOTES.LIKE_SUCCESS);
+    const result = await this.service.setReaction(
+      id,
+      req.user!.id,
+      req.body.type,
+    );
+    return ApiResponse.success(res, result, "Quote reaction updated.");
   });
 }
 

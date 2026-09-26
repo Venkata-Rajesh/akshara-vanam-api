@@ -1,11 +1,11 @@
-import mongoose, { Document, Model, Schema } from 'mongoose';
-import bcrypt from 'bcryptjs';
+import mongoose, { Document, Model, Schema } from "mongoose";
+import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
   username: string;
   email: string;
   password: string;
-  role: 'user' | 'admin';
+  role: "user" | "admin";
   avatarUrl?: string;
   passwordResetToken?: string;
   passwordResetExpires?: Date;
@@ -18,30 +18,30 @@ const userSchema = new Schema<IUser>(
   {
     username: {
       type: String,
-      required: [true, 'Username is required'],
+      required: [true, "Username is required"],
       trim: true,
-      minlength: [2, 'Username must be at least 2 characters'],
-      maxlength: [50, 'Username cannot exceed 50 characters'],
+      minlength: [2, "Username must be at least 2 characters"],
+      maxlength: [50, "Username cannot exceed 50 characters"],
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
+      required: [true, "Email is required"],
       unique: true,
       lowercase: true,
       trim: true,
-      match: [/^\S+@\S+\.\S+$/, 'Please provide a valid email address'],
+      match: [/^\S+@\S+\.\S+$/, "Please provide a valid email address"],
       index: true,
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
-      minlength: [6, 'Password must be at least 6 characters'],
+      required: [true, "Password is required"],
+      minlength: [12, "Password must be at least 12 characters"],
       select: false,
     },
     role: {
       type: String,
-      enum: ['user', 'admin'],
-      default: 'user',
+      enum: ["user", "admin"],
+      default: "user",
     },
     avatarUrl: {
       type: String,
@@ -67,12 +67,12 @@ const userSchema = new Schema<IUser>(
         return ret;
       },
     },
-  }
+  },
 );
 
 // Hash password before saving
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+userSchema.pre("save", async function (next) {
+  if (!this.isModified("password")) {
     return next();
   }
   try {
@@ -85,8 +85,10 @@ userSchema.pre('save', async function (next) {
 });
 
 // Compare password method
-userSchema.methods.comparePassword = async function (candidatePassword: string): Promise<boolean> {
+userSchema.methods.comparePassword = async function (
+  candidatePassword: string,
+): Promise<boolean> {
   return bcrypt.compare(candidatePassword, this.password);
 };
 
-export const User: Model<IUser> = mongoose.model<IUser>('User', userSchema);
+export const User: Model<IUser> = mongoose.model<IUser>("User", userSchema);
