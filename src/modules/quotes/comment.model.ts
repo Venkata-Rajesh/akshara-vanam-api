@@ -1,11 +1,13 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
 export type CommentStatus = "visible" | "hidden" | "deleted";
+export type CommentLanguage = "english" | "telugu";
 
 export interface IQuoteComment extends Document {
   quoteId: Types.ObjectId;
   userId: Types.ObjectId;
   body: string;
+  language: CommentLanguage;
   status: CommentStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -31,6 +33,11 @@ const quoteCommentSchema = new Schema<IQuoteComment>(
       trim: true,
       minlength: [1, "Comment cannot be empty"],
       maxlength: [1500, "Comment cannot exceed 1500 characters"],
+    },
+    language: {
+      type: String,
+      enum: ["english", "telugu"],
+      default: "english",
     },
     status: {
       type: String,

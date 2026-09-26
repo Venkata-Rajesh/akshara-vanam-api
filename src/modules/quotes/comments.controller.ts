@@ -45,6 +45,7 @@ export class CommentsController {
       routeParam(req.params.quoteId),
       req.user!.id,
       req.body.body,
+      req.body.language,
     );
     return ApiResponse.created(res, comment, "Comment added.");
   });

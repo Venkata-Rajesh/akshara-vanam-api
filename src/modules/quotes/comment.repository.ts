@@ -1,5 +1,5 @@
 import { Types } from "mongoose";
-import { QuoteComment, CommentStatus } from "./comment.model";
+import { QuoteComment, CommentLanguage, CommentStatus } from "./comment.model";
 
 export class CommentRepository {
   async list(
@@ -21,11 +21,17 @@ export class CommentRepository {
     return { comments, total };
   }
 
-  create(data: { quoteId: string; userId: string; body: string }) {
+  create(data: {
+    quoteId: string;
+    userId: string;
+    body: string;
+    language: CommentLanguage;
+  }) {
     return QuoteComment.create({
       quoteId: new Types.ObjectId(data.quoteId),
       userId: new Types.ObjectId(data.userId),
       body: data.body,
+      language: data.language,
     }).then((comment) => comment.populate("userId", "username avatarUrl"));
   }
 

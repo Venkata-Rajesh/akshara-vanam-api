@@ -2,7 +2,7 @@ import { Types } from "mongoose";
 import { ForbiddenError, NotFoundError } from "../../utils/appError";
 import { UserContext } from "../../types";
 import { Quote } from "./quotes.model";
-import { CommentStatus } from "./comment.model";
+import { CommentLanguage, CommentStatus } from "./comment.model";
 import { CommentRepository, commentRepository } from "./comment.repository";
 
 export class CommentService {
@@ -35,9 +35,19 @@ export class CommentService {
     };
   }
 
-  async create(quoteId: string, userId: string, body: string) {
+  async create(
+    quoteId: string,
+    userId: string,
+    body: string,
+    language: CommentLanguage = "english",
+  ) {
     await this.requirePublishedQuote(quoteId);
-    return this.repository.create({ quoteId, userId, body: body.trim() });
+    return this.repository.create({
+      quoteId,
+      userId,
+      body: body.trim(),
+      language,
+    });
   }
 
   async update(commentId: string, body: string, user: UserContext) {

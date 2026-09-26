@@ -14,6 +14,7 @@ export const createCommentSchema = z.object({
   params: z.object({ quoteId: objectId }),
   body: z.object({
     body: z.string().trim().min(1).max(1500),
+    language: z.enum(["english", "telugu"]).default("english"),
   }),
 });
 
