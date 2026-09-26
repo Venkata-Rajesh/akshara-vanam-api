@@ -109,7 +109,10 @@ quoteSchema.pre("save", function (next) {
 });
 
 // Indexes for high performance (tags is indexed in schema definition)
-quoteSchema.index({ content: "text", author: "text" });
+quoteSchema.index(
+  { content: "text", author: "text" },
+  { default_language: "english", language_override: "textSearchLanguage" },
+);
 quoteSchema.index({ createdAt: -1 });
 
 export const Quote: Model<IQuote> = mongoose.model<IQuote>(
