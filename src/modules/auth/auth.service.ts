@@ -1,10 +1,19 @@
-import { userRepository, UserRepository } from '../users/users.repository';
-import { ForgotPasswordInput, LoginInput, ResetPasswordInput, SignupInput } from './auth.validation';
-import { createHash, randomBytes } from 'node:crypto';
-import { ConflictError, UnauthorizedError, NotFoundError } from '../../utils/appError';
-import { signToken } from '../../utils/jwt';
-import { MESSAGES } from '../../constants/messages';
-import { IUser } from '../users/users.model';
+import { userRepository, UserRepository } from "../users/users.repository";
+import {
+  ForgotPasswordInput,
+  LoginInput,
+  ResetPasswordInput,
+  SignupInput,
+} from "./auth.validation";
+import { createHash, randomBytes } from "node:crypto";
+import {
+  ConflictError,
+  UnauthorizedError,
+  NotFoundError,
+} from "../../utils/appError";
+import { signToken } from "../../utils/jwt";
+import { MESSAGES } from "../../constants/messages";
+import { IUser } from "../users/users.model";
 
 export interface AuthResult {
   user: {
@@ -31,7 +40,7 @@ export class AuthService {
       username: input.username,
       email: input.email,
       password: input.password,
-      role: 'user',
+      role: "user",
     });
 
     const token = this.generateUserToken(user);
@@ -78,28 +87,38 @@ export class AuthService {
   async getProfile(userId: string) {
     const user = await this.userRepo.findById(userId);
     if (!user) {
-      throw new NotFoundError('User profile not found');
+      throw new NotFoundError("User profile not found");
     }
     return user;
   }
 
-  async requestPasswordReset(input: ForgotPasswordInput): Promise<void> {
+  async requestPasswordReset(
+    input: ForgotPasswordInput,
+  ): Promise<{ resetUrl?: string }> {
     const user = await this.userRepo.findByEmail(input.email);
-    if (!user) return;
+    if (!user) return {};
 
-    const token = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    await this.userRepo.setPasswordResetToken(user.id || user._id.toString(), tokenHash, new Date(Date.now() + 15 * 60 * 1000));
-    if (process.env.NODE_ENV !== 'production') {
-      console.info(`Password reset URL: http://localhost:4200/reset-password/${token}`);
+    const token = randomBytes(32).toString("hex");
+    const tokenHash = createHash("sha256").update(token).digest("hex");
+    await this.userRepo.setPasswordResetToken(
+      user.id || user._id.toString(),
+      tokenHash,
+      new Date(Date.now() + 15 * 60 * 1000),
+    );
+    if (process.env.NODE_ENV !== "production") {
+      return { resetUrl: `http://localhost:4200/reset-password/${token}` };
     }
+    return {};
   }
 
   async resetPassword(token: string, input: ResetPasswordInput): Promise<void> {
-    const tokenHash = createHash('sha256').update(token).digest('hex');
+    const tokenHash = createHash("sha256").update(token).digest("hex");
     const user = await this.userRepo.findByPasswordResetToken(tokenHash);
-    if (!user) throw new UnauthorizedError('Reset token is invalid or expired');
-    await this.userRepo.updatePassword(user.id || user._id.toString(), input.password);
+    if (!user) throw new UnauthorizedError("Reset token is invalid or expired");
+    await this.userRepo.updatePassword(
+      user.id || user._id.toString(),
+      input.password,
+    );
   }
 
   private generateUserToken(user: IUser): string {
